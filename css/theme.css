@@ -1,0 +1,57 @@
+@charset "utf-8";
+
+
+/*Google Fontsの読み込み
+---------------------------------------------------------------------------*/
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Ballet:opsz@16..72&display=swap');
+
+
+/*Font Awesomeの読み込み
+---------------------------------------------------------------------------*/
+@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css");
+
+
+/*CSSカスタムプロパティ（サイト全体を一括管理する為の設定）
+---------------------------------------------------------------------------*/
+:root {
+
+	--bg-color: #fff;			/*主にテンプレートの背景色*/
+	--bg-inverse-color: #333;	/*上のカラーの「対」として使う色*/
+	
+	--primary-color: #0b519f;		/*メインまたはアクセントカラー*/
+	--primary-inverse-color: #fff;	/*上のカラーの「対」として使う色*/
+
+	--light-color: #e8f0f8;			/*淡いカラー*/
+	--light-inverse-color: #333;	/*上の淡いカラーの「対」として使う色*/
+
+	--accent-color: #e33607;		/*アクセントカラー*/
+	--accent-inverse-color: #fff;	/*上のカラーの「対」として使う色*/
+
+	--content-space-l: 5vw;  /*主に左右の余白の一括管理用。画面幅100% = 100vwです。*/
+	--content-space-s: 2rem;  /*headerやfooter、２カラム以上のレイアウトで主に使います*/
+
+	--border-color: rgba(0,0,0,0.18);	/*枠線の色。0,0,0は黒の事で0.18は色が18%出た状態。*/
+
+	--base-font: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro W3", Meiryo, "メイリオ", "Osaka", "MS PGothic", "ＭＳ Ｐゴシック", sans-serif;  /*フォント指定*/
+	--accent-font: "Jost";  /*アクセント用英語フォント指定*/
+
+}
+
+	/*画面幅500px以下の追加指定*/
+	@media (max-width:500px) {
+
+	:root {
+		--content-space-l: 10px;	/*余白の一括管理用。小さな端末で余白を狭くする。*/
+	}
+
+	}/*追加指定ここまで*/
+
+
+/*暗い背景で使う場合のみ、枠線の色を白っぽく。（※rootで指定している々を変更する場合、ここの調整が必要になる場合もあります。）*/
+.bg1-parts,
+.bg1-primary-parts,
+.bg1-accent-parts {
+	--border-color: rgba(255,255,255,0.22);
+}

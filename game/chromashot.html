@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chromashot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; touch-action:none; }
+html,body {
+  width:100%; height:100%;
+  background:#0d1b2a;
+  display:flex; justify-content:center; align-items:center;
+  overflow:hidden;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+}
+#gameWrapper { position:relative; display:inline-block; }
+#gameCanvas  { display:block; cursor:crosshair; border-radius:14px; box-shadow:0 0 48px rgba(0,140,255,.45); }
+
+/* ── bottom bar ── */
+#ui {
+  position:absolute; bottom:0; left:0;
+  width:100%; height:var(--ui-h,60px);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 calc(var(--ui-h,60px)*.22);
+  pointer-events:none;
+}
+.ui-btn {
+  pointer-events:all;
+  width:calc(var(--ui-h,60px)*.72); height:calc(var(--ui-h,60px)*.72);
+  border-radius:50%; border:2px solid rgba(255,255,255,.55);
+  background:rgba(80,160,255,.25); color:#fff;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+  font-size:calc(var(--ui-h,60px)*.3);
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(4px); transition:transform .1s;
+}
+.ui-btn:active { transform:scale(.9); }
+#scoreDisplay {
+  font-size:calc(var(--ui-h,60px)*.38); font-weight:800;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+  color:rgba(255,255,255,.95); text-shadow:0 2px 8px rgba(0,0,0,.6);
+  letter-spacing:3px;
+}
+
+/* ── shared full overlay ── */
+.full-overlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,15,50,.88);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  border-radius:14px;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+  overflow-y:auto;
+}
+.full-overlay h1 { font-size:calc(var(--cw,390px)*.11); font-weight:800; color:#fff; text-shadow:0 0 24px #4af; margin-bottom:6px; position:relative; z-index:1; }
+.full-overlay p  { font-size:calc(var(--cw,390px)*.05); color:#adf; margin-bottom:16px; text-align:center; padding:0 16px; position:relative; z-index:1; }
+
+/* ── stats panel ── */
+#statsPanel {
+  display:none;
+  width:calc(var(--cw,390px)*.82);
+  background:rgba(10,30,80,.65);
+  border:1px solid rgba(100,180,255,.2);
+  border-radius:12px;
+  padding:12px 16px;
+  margin-bottom:18px;
+  position:relative; z-index:1;
+}
+#statsPanel .stat-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:5px 0;
+  border-bottom:1px solid rgba(100,180,255,.1);
+  font-size:calc(var(--cw,390px)*.038);
+}
+#statsPanel .stat-row:last-child { border-bottom:none; }
+#statsPanel .stat-label { color:rgba(160,210,255,.75); }
+#statsPanel .stat-value { color:#fff; font-weight:700; letter-spacing:.5px; }
+#statsPanel .stat-value.highlight { color:#fdd835; text-shadow:0 0 8px rgba(253,216,53,.5); }
+.ov-btn {
+  margin:6px 0; padding:calc(var(--cw,390px)*.03) calc(var(--cw,390px)*.09);
+  font-size:calc(var(--cw,390px)*.05); border:none; border-radius:30px;
+  background:linear-gradient(135deg,#4af,#08f); color:#fff;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+  cursor:pointer; font-weight:700; box-shadow:0 4px 18px rgba(0,150,255,.45);
+  transition:transform .12s; min-width:calc(var(--cw,390px)*.5);
+  position:relative; z-index:1;
+}
+.ov-btn.secondary { background:linear-gradient(135deg,#555,#333); box-shadow:none; }
+.ov-btn:active { transform:scale(.96); }
+
+/* ── volume panel ── */
+#volumePanel {
+  position:absolute; bottom:calc(var(--ui-h,60px) + 8px); left:50%;
+  transform:translateX(-50%);
+  background:rgba(5,20,55,.92); border:1px solid rgba(100,180,255,.35);
+  border-radius:14px; padding:16px 22px; display:none;
+  flex-direction:column; gap:14px; z-index:20;
+  backdrop-filter:blur(8px); min-width:220px;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+}
+#volumePanel .vp-title {
+  color:#adf; font-size:13px; text-align:center; letter-spacing:1px;
+  border-bottom:1px solid rgba(100,180,255,.2); padding-bottom:10px;
+}
+#volumePanel label { display:flex; align-items:center; gap:10px; color:#fff; font-size:12px; }
+#volumePanel label .vp-label { width:28px; flex-shrink:0; }
+#volumePanel label span { width:28px; text-align:right; flex-shrink:0; font-size:11px; color:#8cf; }
+#volumePanel input[type=range] {
+  flex:1; accent-color:#4af; cursor:pointer; height:4px;
+}
+#volumePanel .vp-close {
+  align-self:center; background:rgba(100,180,255,.2);
+  border:1px solid rgba(100,180,255,.35); color:#adf;
+  border-radius:8px; padding:5px 18px; font-size:11px; cursor:pointer;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+}
+
+#overlay    { z-index:10; }
+#pauseMenu  { z-index:15; }
+
+/* ── how-to overlay ── */
+#howtoOverlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,15,50,.95);
+  display:none; flex-direction:column; align-items:center;
+  border-radius:14px; z-index:20;
+  font-family:'M PLUS Rounded 1c', sans-serif;
+  overflow-y:auto; padding:18px 0 12px;
+  box-sizing:border-box;
+}
+#howtoOverlay h2 {
+  font-size:calc(var(--cw,390px)*.07); font-weight:800; color:#fff;
+  text-shadow:0 0 18px #4af; margin:0 0 12px;
+}
+.howto-section {
+  width:calc(var(--cw,390px)*.86);
+  background:rgba(10,30,80,.65);
+  border:1px solid rgba(100,180,255,.2);
+  border-radius:12px; padding:10px 14px; margin-bottom:10px;
+}
+.howto-section h3 {
+  font-size:calc(var(--cw,390px)*.042); color:#7df; font-weight:700;
+  margin:0 0 6px; border-bottom:1px solid rgba(100,180,255,.2); padding-bottom:5px;
+}
+.howto-row {
+  display:flex; align-items:flex-start; gap:8px;
+  font-size:calc(var(--cw,390px)*.036); color:#cef;
+  padding:3px 0; line-height:1.5;
+}
+.howto-row .hi { flex-shrink:0; width:40px; text-align:center; font-weight:700; color:#7df; }
+.howto-row .ht { flex:1; }
+
+/* ── confetti canvas (inside win overlay) ── */
+#confettiCanvas {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  pointer-events:none; border-radius:14px;
+  z-index:0; opacity:0.45;
+}
+</style>
+</head>
+<body>
+<div id="gameWrapper">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- bottom UI -->
+  <div id="ui">
+    <button class="ui-btn" id="musicBtn">♪</button>
+    <div id="scoreDisplay">0000000</div>
+    <button class="ui-btn" id="pauseBtn">⏸</button>
+  </div>
+
+  <!-- volume panel (above music button) -->
+  <div id="volumePanel">
+    <div class="vp-title">🎵 音量設定</div>
+    <label><span class="vp-label">BGM</span><input type="range" id="bgmSlider" min="0" max="100" value="60"> <span id="bgmVal">60</span></label>
+    <label><span class="vp-label">SE</span><input type="range" id="sfxSlider" min="0" max="100" value="75"> <span id="sfxVal">75</span></label>
+    <button class="vp-close" id="vpClose">閉じる</button>
+  </div>
+
+  <!-- pause menu -->
+  <div class="full-overlay" id="pauseMenu" style="display:none">
+    <h1>⏸ 一時停止</h1>
+    <p></p>
+    <button class="ov-btn" id="resumeBtn">再開</button>
+    <button class="ov-btn secondary" id="pauseHowtoBtn" style="margin-top:4px;">📖 遊び方</button>
+    <button class="ov-btn secondary" id="restartBtn">リスタート</button>
+  </div>
+
+  <!-- start / win / gameover overlay -->
+  <div class="full-overlay" id="overlay">
+    <canvas id="confettiCanvas"></canvas>
+    <h1>🎯 Chromashot</h1>
+    <p>同じ色を3つ以上つなげて消そう！</p>
+    <div id="statsPanel">
+      <div class="stat-row"><span class="stat-label">🏆 スコア</span><span class="stat-value highlight" id="st-score">—</span></div>
+      <div class="stat-row"><span class="stat-label">💥 消去バブル数</span><span class="stat-value" id="st-popped">—</span></div>
+      <div class="stat-row"><span class="stat-label">🎯 発射回数</span><span class="stat-value" id="st-shots">—</span></div>
+      <div class="stat-row"><span class="stat-label">📊 的中率</span><span class="stat-value" id="st-acc">—</span></div>
+      <div class="stat-row"><span class="stat-label">🔥 最大コンボ</span><span class="stat-value" id="st-combo">—</span></div>
+      <div class="stat-row"><span class="stat-label">✨ 最大一括消去</span><span class="stat-value" id="st-maxpop">—</span></div>
+      <div class="stat-row"><span class="stat-label">🌈 ワイルド使用</span><span class="stat-value" id="st-wild">—</span></div>
+      <div class="stat-row"><span class="stat-label">💣 爆弾使用</span><span class="stat-value" id="st-bomb">—</span></div>
+      <div class="stat-row"><span class="stat-label">⏱ プレイ時間</span><span class="stat-value" id="st-time">—</span></div>
+    </div>
+    <button class="ov-btn" id="startBtn">スタート</button>
+    <button class="ov-btn secondary" id="howtoBtn" style="margin-top:4px;">📖 遊び方</button>
+  </div>
+
+  <!-- how-to overlay -->
+  <div id="howtoOverlay">
+    <h2>📖 遊び方</h2>
+
+    <div class="howto-section">
+      <h3>🎯 基本ルール</h3>
+      <div class="howto-row"><span class="hi">👆</span><span class="ht">タップ／クリックした方向へバブルを発射</span></div>
+      <div class="howto-row"><span class="hi">🎨</span><span class="ht">同じ色のバブルを<b>3個以上</b>つなげると消去</span></div>
+      <div class="howto-row"><span class="hi">🏆</span><span class="ht">バブルを全て消去するとクリア</span></div>
+      <div class="howto-row"><span class="hi">⚠️</span><span class="ht">バブルが赤い点線を超えるとゲームオーバー</span></div>
+    </div>
+
+    <div class="howto-section">
+      <h3>🔄 操作</h3>
+      <div class="howto-row"><span class="hi">NEXT</span><span class="ht">次のバブル。タップで現在のバブルと入れ替え</span></div>
+      <div class="howto-row"><span class="hi">HOLD</span><span class="ht">特殊バブルが自動保存される。タップで発射バブルと交換</span></div>
+    </div>
+
+    <div class="howto-section">
+      <h3>📊 難易度（ペナルティ）</h3>
+      <div class="howto-row"><span class="hi">⬇️</span><span class="ht">連続でミスが続くと、バブルが数行押し下げられる</span></div>
+      <div class="howto-row"><span class="hi">🔢</span><span class="ht">右上のカウンターが残りミス回数。周期ごとに上限が変化</span></div>
+    </div>
+
+    <div class="howto-section">
+      <h3>✨ 特殊バブル</h3>
+      <div class="howto-row"><span class="hi">🌈</span><span class="ht"><b>レインボー</b>：隣接する全色のバブルを一括消去。50個消すごとに獲得</span></div>
+      <div class="howto-row"><span class="hi">💥</span><span class="ht"><b>爆弾</b>：着地点の周囲を爆破。ピンチ時に1周期1回出現</span></div>
+      <div class="howto-row"><span class="hi">🛡️</span><span class="ht"><b>シールド</b>：HPが2のバブル。直撃で即破壊、隣接着地でダメージ</span></div>
+    </div>
+
+    <button class="ov-btn secondary" id="howtoClose" style="margin-top:6px;">← 戻る</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  Tone.js Audio
+// ═══════════════════════════════════════════════════════
+let audioReady = false;
+let bgmVolNode, sfxVolNode, bgmPart;
+let chordSynth, bassSynth, melodySynth;
+const sfxS = {};   // sfx synths keyed by name
+let musicOn = true;
+let bgmDb  = -14;  // BGM volume in dB
+let sfxDb  = -8;   // SFX volume in dB
+
+async function initAudio() {
+  if (audioReady) return;
+  await Tone.start();
+
+  // ── Volume busses ──────────────────────────────────
+  bgmVolNode = new Tone.Volume(bgmDb).toDestination();
+  sfxVolNode = new Tone.Volume(sfxDb).toDestination();
+
+  // ── BGM synths ─────────────────────────────────────
+  chordSynth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle8' },
+    envelope: { attack: 0.06, decay: 0.5, sustain: 0.35, release: 1.0 }
+  }).connect(bgmVolNode);
+  chordSynth.volume.value = -4;
+
+  bassSynth = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.02, decay: 0.3, sustain: 0.5, release: 0.4 }
+  }).connect(bgmVolNode);
+
+  melodySynth = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.01, decay: 0.18, sustain: 0.25, release: 0.3 }
+  }).connect(bgmVolNode);
+  melodySynth.volume.value = -3;
+
+  // ── SFX synths ─────────────────────────────────────
+  // Shoot : sine sweep
+  sfxS.shoot = new Tone.Synth({
+    oscillator:{ type:'sine' },
+    envelope:{ attack:0.001, decay:0.14, sustain:0, release:0.05 }
+  }).connect(sfxVolNode);
+
+  // Land : membrane thud
+  sfxS.land = new Tone.MembraneSynth({
+    pitchDecay:0.05, octaves:5,
+    envelope:{ attack:0.001, decay:0.1, sustain:0, release:0.08 }
+  }).connect(sfxVolNode);
+  sfxS.land.volume.value = -4;
+
+  // Pop : bright square burst (poly for simultaneous pops)
+  sfxS.pop = new Tone.PolySynth(Tone.Synth, {
+    oscillator:{ type:'square' },
+    envelope:{ attack:0.001, decay:0.09, sustain:0, release:0.04 }
+  }).connect(sfxVolNode);
+  sfxS.pop.volume.value = -6;
+
+  // Drop : sawtooth fall
+  sfxS.drop = new Tone.Synth({
+    oscillator:{ type:'sawtooth' },
+    envelope:{ attack:0.001, decay:0.28, sustain:0, release:0.1 }
+  }).connect(sfxVolNode);
+
+  // Clear / Gameover: general synth
+  sfxS.result = new Tone.PolySynth(Tone.Synth, {
+    oscillator:{ type:'triangle' },
+    envelope:{ attack:0.02, decay:0.3, sustain:0.3, release:0.5 }
+  }).connect(sfxVolNode);
+
+  // ── BGM Part (C – Am – F – G × 2, 8小節, 128 BPM) ────
+  // 各ノートが自前の音長を持つ。休符はエントリを省略して表現。
+  // chDur: コード音長 / bsDur: ベース音長 / mlDur: メロディ音長
+  Tone.Transport.bpm.value = 128;
+
+  // prettier-ignore
+  const seq = [
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 0 — C major                        ║
+    // ╚══════════════════════════════════════════╝
+    // コード: 全音符
+    {t:'0:0:0', ch:['C4','E4','G4'],        chDur:'1m'  },
+    // ベース: ランニング風
+    {t:'0:0:0', bs:'C2',  bsDur:'4n'  },
+    {t:'0:1:0', bs:'G1',  bsDur:'8n'  },
+    {t:'0:1:2', bs:'C2',  bsDur:'8n'  },
+    {t:'0:2:0', bs:'E2',  bsDur:'4n'  },
+    {t:'0:3:0', bs:'G2',  bsDur:'8n'  },
+    {t:'0:3:2', bs:'C2',  bsDur:'8n'  },
+    // メロディ: 8分×2→4分→付点8分+16分 のリズム
+    {t:'0:0:0', ml:'C5',  mlDur:'8n'  },
+    {t:'0:0:2', ml:'E5',  mlDur:'8n'  },
+    {t:'0:1:0', ml:'G5',  mlDur:'4n'  },
+    // 休符 (0:2:0)
+    {t:'0:2:0', ml:'G5',  mlDur:'8n'  },
+    {t:'0:2:2', ml:'A5',  mlDur:'8n'  },
+    {t:'0:3:0', ml:'G5',  mlDur:'8n.' },   // 付点8分
+    {t:'0:3:3', ml:'E5',  mlDur:'16n' },   // 16分
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 1 — Am                             ║
+    // ╚══════════════════════════════════════════╝
+    {t:'1:0:0', ch:['A3','C4','E4'],         chDur:'1m'  },
+    {t:'1:0:0', bs:'A1',  bsDur:'4n'  },
+    {t:'1:1:0', bs:'A1',  bsDur:'8n'  },
+    {t:'1:1:2', bs:'C2',  bsDur:'8n'  },
+    {t:'1:2:0', bs:'E2',  bsDur:'4n'  },
+    {t:'1:3:0', bs:'A1',  bsDur:'4n'  },
+    // メロディ: 付点4分で伸ばし → 休符 → 8分
+    {t:'1:0:0', ml:'A5',  mlDur:'4n'  },
+    {t:'1:1:0', ml:'G5',  mlDur:'8n'  },
+    {t:'1:1:2', ml:'E5',  mlDur:'8n'  },
+    {t:'1:2:0', ml:'E5',  mlDur:'4n.' },   // 付点4分（1.5拍）→ 3:2まで
+    // 休符 (1:3:0 〜 1:3:1)
+    {t:'1:3:2', ml:'A4',  mlDur:'8n'  },
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 2 — F major                        ║
+    // ╚══════════════════════════════════════════╝
+    {t:'2:0:0', ch:['F3','A3','C4'],         chDur:'1m'  },
+    {t:'2:0:0', bs:'F1',  bsDur:'8n'  },
+    {t:'2:0:2', bs:'A1',  bsDur:'8n'  },
+    {t:'2:1:0', bs:'C2',  bsDur:'4n'  },
+    {t:'2:2:0', bs:'F1',  bsDur:'4n'  },
+    {t:'2:3:0', bs:'C2',  bsDur:'8n'  },
+    {t:'2:3:2', bs:'F2',  bsDur:'8n'  },
+    // メロディ: 付点8分+16分 のシンコペ
+    {t:'2:0:0', ml:'F5',  mlDur:'4n'  },
+    {t:'2:1:0', ml:'A5',  mlDur:'8n'  },
+    {t:'2:1:2', ml:'C6',  mlDur:'8n.' },   // 付点8分
+    {t:'2:2:1', ml:'A5',  mlDur:'16n' },   // 16分（裏拍）
+    {t:'2:2:2', ml:'F5',  mlDur:'8n'  },
+    {t:'2:3:0', ml:'E5',  mlDur:'8n'  },
+    {t:'2:3:2', ml:'D5',  mlDur:'8n'  },
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 3 — G major                        ║
+    // ╚══════════════════════════════════════════╝
+    {t:'3:0:0', ch:['G3','B3','D4'],         chDur:'1m'  },
+    {t:'3:0:0', bs:'G1',  bsDur:'4n'  },
+    {t:'3:1:0', bs:'D2',  bsDur:'8n'  },
+    {t:'3:1:2', bs:'G2',  bsDur:'8n'  },
+    {t:'3:2:0', bs:'B1',  bsDur:'4n'  },
+    {t:'3:3:0', bs:'D2',  bsDur:'4n'  },
+    // メロディ: 跳躍→付点4分で伸ばし→休符→着地
+    {t:'3:0:0', ml:'G5',  mlDur:'8n'  },
+    {t:'3:0:2', ml:'B5',  mlDur:'8n'  },
+    {t:'3:1:0', ml:'D6',  mlDur:'4n.' },   // 付点4分
+    // 休符 (3:2:2 〜 3:2:3)
+    {t:'3:3:0', ml:'B5',  mlDur:'8n'  },
+    {t:'3:3:2', ml:'G5',  mlDur:'8n'  },
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 4 — C major (エネルギー上昇)        ║
+    // ╚══════════════════════════════════════════╝
+    {t:'4:0:0', ch:['C4','E4','G4','B4'],    chDur:'2n'  },   // Cmaj7 前半
+    {t:'4:2:0', ch:['C4','E4','G4'],         chDur:'2n'  },   // C 後半
+    // ベース: 上昇アルペジオ
+    {t:'4:0:0', bs:'C2',  bsDur:'8n'  },
+    {t:'4:0:2', bs:'E2',  bsDur:'8n'  },
+    {t:'4:1:0', bs:'G2',  bsDur:'8n'  },
+    {t:'4:1:2', bs:'C3',  bsDur:'8n'  },
+    {t:'4:2:0', bs:'G2',  bsDur:'4n'  },
+    {t:'4:3:0', bs:'C2',  bsDur:'8n'  },
+    {t:'4:3:2', bs:'E2',  bsDur:'8n'  },
+    // メロディ: 高音域へ跳ぶ
+    {t:'4:0:0', ml:'E6',  mlDur:'4n'  },
+    {t:'4:1:0', ml:'C6',  mlDur:'8n'  },
+    {t:'4:1:2', ml:'B5',  mlDur:'8n'  },
+    {t:'4:2:0', ml:'G5',  mlDur:'4n.' },   // 付点4分
+    // 休符 (4:3:2 の手前まで)
+    {t:'4:3:2', ml:'E5',  mlDur:'8n'  },
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 5 — Am                             ║
+    // ╚══════════════════════════════════════════╝
+    {t:'5:0:0', ch:['A3','C4','E4'],         chDur:'1m'  },
+    {t:'5:0:0', bs:'A1',  bsDur:'4n'  },
+    {t:'5:1:0', bs:'E2',  bsDur:'8n'  },
+    {t:'5:1:2', bs:'A1',  bsDur:'8n'  },
+    {t:'5:2:0', bs:'C2',  bsDur:'8n'  },
+    {t:'5:2:2', bs:'E2',  bsDur:'8n'  },
+    {t:'5:3:0', bs:'A2',  bsDur:'4n'  },
+    // メロディ: 付点8分+16分 のはずみ感
+    {t:'5:0:0', ml:'A5',  mlDur:'8n.' },   // 付点8分
+    {t:'5:0:3', ml:'B5',  mlDur:'16n' },   // 16分
+    {t:'5:1:0', ml:'C6',  mlDur:'4n'  },
+    // 休符 (5:2:0)
+    {t:'5:2:2', ml:'A5',  mlDur:'8n'  },
+    {t:'5:3:0', ml:'G5',  mlDur:'8n'  },
+    {t:'5:3:2', ml:'E5',  mlDur:'8n'  },
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 6 — F major                        ║
+    // ╚══════════════════════════════════════════╝
+    {t:'6:0:0', ch:['F3','A3','C4'],         chDur:'1m'  },
+    {t:'6:0:0', bs:'F1',  bsDur:'4n'  },
+    {t:'6:1:0', bs:'C2',  bsDur:'8n'  },
+    {t:'6:1:2', bs:'F2',  bsDur:'8n'  },
+    {t:'6:2:0', bs:'A1',  bsDur:'4n'  },
+    {t:'6:3:0', bs:'F1',  bsDur:'8n'  },
+    {t:'6:3:2', bs:'C2',  bsDur:'8n'  },
+    // メロディ: 付点8分+16分 の反復
+    {t:'6:0:0', ml:'F5',  mlDur:'8n'  },
+    {t:'6:0:2', ml:'G5',  mlDur:'8n'  },
+    {t:'6:1:0', ml:'A5',  mlDur:'4n'  },
+    {t:'6:2:0', ml:'C6',  mlDur:'8n.' },   // 付点8分
+    {t:'6:2:3', ml:'A5',  mlDur:'16n' },   // 16分
+    {t:'6:3:0', ml:'G5',  mlDur:'8n'  },
+    {t:'6:3:2', ml:'F5',  mlDur:'8n'  },
+
+    // ╔══════════════════════════════════════════╗
+    // ║  Bar 7 — G7 (次のCへ解決)               ║
+    // ╚══════════════════════════════════════════╝
+    {t:'7:0:0', ch:['G3','B3','D4','F4'],    chDur:'1m'  },
+    {t:'7:0:0', bs:'G1',  bsDur:'4n'  },
+    {t:'7:1:0', bs:'G1',  bsDur:'8n'  },
+    {t:'7:1:2', bs:'B1',  bsDur:'8n'  },
+    {t:'7:2:0', bs:'D2',  bsDur:'4n'  },
+    {t:'7:3:0', bs:'G2',  bsDur:'8n'  },
+    {t:'7:3:2', bs:'F2',  bsDur:'8n'  },
+    // メロディ: 上昇してから付点8分→16分で締め
+    {t:'7:0:0', ml:'G5',  mlDur:'8n'  },
+    {t:'7:0:2', ml:'A5',  mlDur:'8n'  },
+    {t:'7:1:0', ml:'B5',  mlDur:'8n'  },
+    {t:'7:1:2', ml:'D6',  mlDur:'8n.' },   // 付点8分
+    {t:'7:2:1', ml:'C6',  mlDur:'16n' },   // 16分（シンコペ）
+    {t:'7:2:2', ml:'B5',  mlDur:'8n'  },
+    {t:'7:3:0', ml:'G5',  mlDur:'4n'  },   // 4分音符で着地 → Bar 0へ
+  ];
+
+  bgmPart = new Tone.Part((time, n) => {
+    if (n.ch) chordSynth.triggerAttackRelease(n.ch, n.chDur || '2n', time);
+    if (n.bs) bassSynth.triggerAttackRelease(n.bs, n.bsDur || '4n', time);
+    if (n.ml) melodySynth.triggerAttackRelease(n.ml, n.mlDur || '8n', time);
+  }, seq.map(n => [n.t, n]));
+  bgmPart.loop    = true;
+  bgmPart.loopEnd = '8m';
+
+  audioReady = true;
+}
+
+function startBGM() {
+  if (!audioReady || !musicOn) return;
+  if (Tone.Transport.state !== 'started') Tone.Transport.start();
+  bgmPart.start(0);
+}
+function stopBGM() {
+  if (bgmPart) bgmPart.stop(0);
+  Tone.Transport.stop();
+  // ② 発音中のノートを即時リリースして残響を消す
+  if (chordSynth)  chordSynth.releaseAll(Tone.now());
+  if (bassSynth)   bassSynth.triggerRelease(Tone.now());
+  if (melodySynth) melodySynth.triggerRelease(Tone.now());
+}
+
+// ── SFX helpers ────────────────────────────────────────
+function sfxShoot() {
+  if (!audioReady) return;
+  try {
+    const now = Tone.now();
+    sfxS.shoot.frequency.setValueAtTime(500, now);
+    sfxS.shoot.frequency.exponentialRampToValueAtTime(180, now + 0.13);
+    sfxS.shoot.triggerAttackRelease(500, '8n', now);
+  } catch(e) {}
+}
+function sfxLand() {
+  if (!audioReady) return;
+  try { sfxS.land.triggerAttackRelease('C1', '16n'); } catch(e) {}
+}
+function sfxPop() {
+  if (!audioReady) return;
+  try { sfxS.pop.triggerAttackRelease(['C6','E6','G6'], '32n'); } catch(e) {}
+}
+function sfxDrop() {
+  if (!audioReady) return;
+  try {
+    const now = Tone.now();
+    sfxS.drop.frequency.cancelScheduledValues(now);
+    sfxS.drop.frequency.setValueAtTime(500, now);
+    sfxS.drop.frequency.exponentialRampToValueAtTime(60, now + 0.26);
+    sfxS.drop.triggerAttackRelease(500, '4n', now);
+  } catch(e) {}
+}
+function sfxClear() {
+  if (!audioReady) return;
+  try {
+    const notes = [['C5','E5','G5'], ['E5','G5','C6'], ['G5','C6','E6']];
+    notes.forEach((ch, i) => sfxS.result.triggerAttackRelease(ch, '8n', Tone.now() + i * 0.13));
+  } catch(e) {}
+}
+function sfxGameover() {
+  if (!audioReady) return;
+  try {
+    const now = Tone.now();
+    sfxS.drop.frequency.cancelScheduledValues(now);
+    sfxS.drop.frequency.setValueAtTime(260, now);
+    sfxS.drop.frequency.exponentialRampToValueAtTime(55, now + 0.9);
+    sfxS.drop.triggerAttackRelease(260, '2n', now);
+  } catch(e) {}
+}
+function sfxBomb() {
+  if (!audioReady) return;
+  try {
+    const now = Tone.now() + 0.02; // 前回のsfxLandとの衝突を避けるため余裕を持たせる
+    sfxS.drop.frequency.cancelScheduledValues(now);
+    sfxS.drop.frequency.setValueAtTime(120, now);
+    sfxS.drop.frequency.exponentialRampToValueAtTime(30, now + 0.5);
+    sfxS.drop.triggerAttackRelease(120, '4n', now);
+    sfxS.land.triggerAttackRelease('C0', '8n', now + 0.12); // landとの間隔を広げる
+  } catch(e) { /* タイミング衝突は無視 */ }
+}
+function sfxWild() {
+  if (!audioReady) return;
+  try {
+    const now = Tone.now();
+    ['C5','E5','G5','C6'].forEach((n,i) => sfxS.result.triggerAttackRelease(n,'16n',now+i*0.07));
+  } catch(e) {}
+}
+function sfxShieldHit(offset = 0) {
+  if (!audioReady) return;
+  try { sfxS.land.triggerAttackRelease('G2', '16n', Tone.now() + offset); } catch(e) {}
+}
+function sfxShieldBreak(offset = 0) {
+  if (!audioReady) return;
+  try {
+    const now = Tone.now() + offset;
+    sfxS.land.triggerAttackRelease('C2', '8n', now);
+    sfxS.drop.frequency.cancelScheduledValues(now + 0.04);
+    sfxS.drop.frequency.setValueAtTime(400, now + 0.05);
+    sfxS.drop.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+    sfxS.drop.triggerAttackRelease(400, '4n', now + 0.05);
+  } catch(e) {}
+}
+// Volume slider utilities
+function dbFromSlider(v) { return v === 0 ? -Infinity : -40 + (v / 100) * 40; }
+function setBgmVolume(v) {
+  bgmDb = dbFromSlider(v);
+  if (bgmVolNode) bgmVolNode.volume.value = bgmDb;
+}
+function setSfxVolume(v) {
+  sfxDb = dbFromSlider(v);
+  if (sfxVolNode) sfxVolNode.volume.value = sfxDb;
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  Canvas & Layout
+// ═══════════════════════════════════════════════════════
+const canvas  = document.getElementById('gameCanvas');
+const ctx     = canvas.getContext('2d');
+const wrapper = document.getElementById('gameWrapper');
+
+const W = 390, H = 720;
+canvas.width = W; canvas.height = H;
+
+const R         = 20;
+const COLS      = 9;
+const ROW_H     = R * 1.73;
+const COL_W     = R * 2;
+const GRID_TOP  = 10;
+const UI_H      = 60;
+const SHOOTER_Y = H - UI_H - R - 14;
+const QUEUE_Y   = SHOOTER_Y;
+const SHOOTER_X = W / 2;
+const SPEED     = 22;
+// ① 斜め隙間通過: 1フレームをSUBSTEPS分割し細かく衝突判定
+const SUBSTEPS  = 8;
+// ② 衝突閾値を縮小 → 視覚的1バブル分の隙間を通過可能に
+const HIT_R     = R * 1.55;
+// ③ ゲームオーバーライン Y座標（発射バブルより6バブル分上）
+const LOSE_Y    = H - UI_H - R - 14 - R * 6;
+
+const COLORS = ['#e53935','#1e88e5','#00acc1','#43a047','#fdd835','#8e24aa','#fb8c00'];
+
+// ── 特殊バブル ────────────────────────────────────
+const WILD = 'WILD';  // ワイルド（任意の色として着地）
+const BOMB = 'BOMB';  // 爆弾（着地周囲を一括消去）
+
+function isNormalColor(v) { return typeof v === 'string' && v.startsWith('#'); }
+function isWild(v)   { return v === WILD; }
+function isBomb(v)   { return v === BOMB; }
+function isShield(v) { return v != null && typeof v === 'object' && v.type === 'shield'; }
+function makeShield() { return { type:'shield', hp:2 }; }
+// セルの描画用カラーを返す（特殊バブルにも対応）
+function cellColor(v) {
+  if (!v) return null;
+  if (isNormalColor(v)) return v;
+  if (isShield(v)) return v.hp >= 2 ? '#78909c' : '#b0bec5';
+  if (isWild(v))   return '#ffffff';
+  if (isBomb(v))   return '#212121';
+  return null;
+}
+
+// ── 特殊バブル管理状態 ────────────────────────────
+let wildGranted   = 0;     // 今ゲームで付与したワイルド数
+let bombActive         = false; // 爆弾がキュー/シューター/スロットに存在する
+let bombGivenThisCycle = false; // 今の周期で既に爆弾を付与したか（1周期1個制限）
+let bombBlastAnim      = null;  // 爆発エフェクト {t, dur, x, y}
+let slot          = null;  // HOLDスロット（WILD or BOMB or null）
+
+let score = 0, paused = false, gameState = 'idle';
+let grid = [], shooter = { color: null }, queue = [];
+let animBubble = null;
+let mouseX = SHOOTER_X, mouseY = SHOOTER_Y - 60;
+let popParticles = [], dropParticles = [];
+let touchAiming = false;
+let volPanelOpen = false;
+
+// ── ゲーム統計 ────────────────────────────────────
+let stats = {
+  shots:0, hitShots:0, popped:0, maxPopOnce:0,
+  combo:0, maxCombo:0, startTime:null, pausedMs:0, pauseStart:null,
+  wildUsed:0, bombUsed:0,
+};
+
+// ── アニメーション状態 ────────────────────────────
+let swapAnim         = null;  // バブル入れ替え {t,dur,fromShooterColor,fromNextColor}
+let slideAnim        = null;  // 行スライドイン {t,dur,totalOffset}
+// 着地アニメ2フェーズ: hit→embed(めり込み)→snap(セル中心)
+let landingAnim      = null;
+let neighborPushAnim = null;  // 隣接バブル押し返し
+let cntFade          = null;  // カウンターフェード {t,dur,fromVal,toVal}
+let cntShown         = null;
+let pendingGameOver  = false; // スライド完了後にゲームオーバー判定が必要
+
+// ── 難易度システム ─────────────────────────────────
+// 行追加パリティ (0 or 1): 挿入ごとにフリップして列数を正しく保つ
+let gridRowParity = 0;
+let missCount      = 0;   // 連続ミス回数（消去なし発射の数）
+let rowsAdded      = 0;   // これまで追加した行数
+let initialColorCount = 0; // ゲーム開始時の盤面の色数
+
+// rowsAdded % 5 に応じた上限: [5,4,3,2,1] サイクル
+const MISS_LIMITS = [5, 4, 3, 2, 1];
+function getMissLimit() { return MISS_LIMITS[rowsAdded % 5]; }
+
+// 盤面から消えた色数（ゲーム開始時との差）
+function getEliminatedColorCount() {
+  return Math.max(0, initialColorCount - getBoardColors().length);
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  Utilities
+// ═══════════════════════════════════════════════════════
+function randColor() { return COLORS[Math.floor(Math.random() * COLORS.length)]; }
+
+function getBoardColors() {
+  const s = new Set();
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < (grid[r]?.length ?? 0); c++) {
+      const cell = grid[r][c];
+      if (isNormalColor(cell)) s.add(cell); // 通常カラーのみ（シールドオブジェクト等は除外）
+    }
+  return [...s];
+}
+function randBoardColor() {
+  const cols = getBoardColors();
+  return cols.length ? cols[Math.floor(Math.random() * cols.length)] : randColor();
+}
+function syncQueueWithBoard() {
+  const cols = getBoardColors();
+  if (!cols.length) return;
+  const fix = c => {
+    if (isWild(c) || isBomb(c)) return c; // 特殊バブルは保持
+    return cols.includes(c) ? c : cols[Math.floor(Math.random() * cols.length)];
+  };
+  shooter.color = fix(shooter.color);
+  queue = queue.map(fix);
+}
+function bubblePos(row, col) {
+  const sx  = (W - (COLS - 1) * COL_W) / 2;
+  const off = ((row + gridRowParity) % 2 === 0) ? 0 : R;
+  return { x: sx + col * COL_W + off, y: GRID_TOP + R + row * ROW_H };
+}
+function colsInRow(row) { return ((row + gridRowParity) % 2 === 0) ? COLS : COLS - 1; }
+
+function initGrid(rows = 9) {
+  grid = [];
+  for (let r = 0; r < rows; r++) {
+    grid[r] = [];
+    for (let c = 0; c < colsInRow(r); c++) grid[r][c] = randColor();
+  }
+}
+function initShooter() {
+  shooter.color = randBoardColor();
+  queue = [randBoardColor()];  // NEXTは1個のみ
+}
+function nextFromQueue() {
+  const c = shooter.color;
+  shooter.color = queue[0];
+  queue[0] = randBoardColor();
+  return c;
+}
+function swapShooterQueue() {
+  if (animBubble || gameState !== 'play' || paused || swapAnim || slideAnim) return;
+  swapAnim = {
+    t: Date.now(), dur: 180,
+    fromShooterColor: shooter.color,  // SHOOTER_X → NEXT_X へ移動
+    fromNextColor:    queue[0],        // NEXT_X → SHOOTER_X へ移動
+  };
+  const tmp = shooter.color;
+  shooter.color = queue[0];
+  queue[0] = tmp;
+}
+
+function swapShooterSlot() {
+  if (animBubble || gameState !== 'play' || paused || slideAnim) return;
+  if (!slot) return; // スロットが空なら何もしない
+  const tmp = shooter.color;
+  shooter.color = slot;
+  slot = tmp;
+  // 通常バブルがスロットに入った場合は空に（スロットは特殊バブル専用）
+  if (isNormalColor(slot)) slot = null;
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  Drawing
+// ═══════════════════════════════════════════════════════
+function lighten(h, a) {
+  const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+  return `rgb(${Math.min(255,r+a)},${Math.min(255,g+a)},${Math.min(255,b+a)})`;
+}
+function darken(h, a) {
+  const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+  return `rgb(${Math.max(0,r-a)},${Math.max(0,g-a)},${Math.max(0,b-a)})`;
+}
+
+function drawBubble(x, y, r, color, alpha = 1) {
+  if (!color || r <= 0) return;
+
+  // ── ワイルドバブル ──
+  if (isWild(color)) {
+    ctx.save(); ctx.globalAlpha = alpha;
+    const h = (Date.now() / 12) % 360;
+    const gr = ctx.createRadialGradient(x-r*.3, y-r*.3, r*.05, x, y, r);
+    gr.addColorStop(0, `hsl(${h},100%,88%)`);
+    gr.addColorStop(.45, `hsl(${(h+120)%360},100%,62%)`);
+    gr.addColorStop(1,  `hsl(${(h+240)%360},100%,42%)`);
+    ctx.shadowColor=`hsla(${h},100%,70%,.6)`; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+    ctx.shadowColor='transparent';
+    const gl=ctx.createRadialGradient(x-r*.3,y-r*.4,r*.05,x-r*.2,y-r*.2,r*.7);
+    gl.addColorStop(0,'rgba(255,255,255,.9)'); gl.addColorStop(.5,'rgba(255,255,255,.25)'); gl.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=gl; ctx.fill();
+    ctx.font=`${Math.round(r*.85)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('✦', x, y+1);
+    ctx.restore(); return;
+  }
+
+  // ── 爆弾バブル ──
+  if (isBomb(color)) {
+    ctx.save(); ctx.globalAlpha = alpha;
+    const gr=ctx.createRadialGradient(x-r*.2,y-r*.2,r*.05,x,y,r);
+    gr.addColorStop(0,'#555'); gr.addColorStop(.6,'#1a1a1a'); gr.addColorStop(1,'#000');
+    ctx.shadowColor='rgba(255,100,0,.55)'; ctx.shadowBlur=12;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+    ctx.shadowColor='transparent';
+    const gl=ctx.createRadialGradient(x-r*.3,y-r*.4,r*.05,x-r*.2,y-r*.2,r*.7);
+    gl.addColorStop(0,'rgba(255,255,255,.55)'); gl.addColorStop(.4,'rgba(255,255,255,.12)'); gl.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=gl; ctx.fill();
+    // 導火線（アニメ）
+    const spark = .5+.5*Math.sin(Date.now()/90);
+    ctx.strokeStyle='#888'; ctx.lineWidth=2; ctx.beginPath();
+    ctx.moveTo(x+r*.3,y-r*.6); ctx.quadraticCurveTo(x+r*.6,y-r*.9,x+r*.55,y-r*1.1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x+r*.55,y-r*1.12,r*.14*(.7+.3*spark),0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,${Math.round(150+100*spark)},30,${.7+.3*spark})`; ctx.fill();
+    // アイコンなし（導火線と光沢で表現）
+    ctx.restore(); return;
+  }
+
+  // ── シールドバブル ──
+  if (isShield(color)) {
+    const cracked = color.hp < 2;
+    ctx.save(); ctx.globalAlpha = alpha;
+    const gr=ctx.createRadialGradient(x-r*.3,y-r*.3,r*.05,x,y,r);
+    gr.addColorStop(0, cracked ? '#cfd8dc':'#90a4ae');
+    gr.addColorStop(.5, cracked ? '#90a4ae':'#607d8b');
+    gr.addColorStop(1, cracked ? '#607d8b':'#37474f');
+    ctx.shadowColor='rgba(0,0,0,.4)'; ctx.shadowBlur=6; ctx.shadowOffsetY=3;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+    ctx.shadowColor='transparent';
+    const gl=ctx.createRadialGradient(x-r*.3,y-r*.4,r*.05,x-r*.2,y-r*.2,r*.7);
+    gl.addColorStop(0,'rgba(255,255,255,.65)'); gl.addColorStop(.4,'rgba(255,255,255,.18)'); gl.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=gl; ctx.fill();
+    if (cracked) {
+      ctx.strokeStyle='rgba(0,0,0,.3)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(x-r*.15,y-r*.55); ctx.lineTo(x+r*.2,y+r*.1); ctx.lineTo(x,y+r*.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+r*.25,y-r*.35); ctx.lineTo(x-r*.05,y+r*.3); ctx.stroke();
+    }
+    ctx.font=`${Math.round(r*.82)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.globalAlpha = alpha * (cracked ? .55 : .8);
+    ctx.fillText('🛡', x, y+1);
+    ctx.restore(); return;
+  }
+
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 3;
+  const gr = ctx.createRadialGradient(x-r*.3, y-r*.3, r*.05, x, y, r);
+  gr.addColorStop(0, lighten(color,60)); gr.addColorStop(.5, color); gr.addColorStop(1, darken(color,40));
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle = gr; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  const gl = ctx.createRadialGradient(x-r*.3, y-r*.4, r*.05, x-r*.2, y-r*.2, r*.7);
+  gl.addColorStop(0,'rgba(255,255,255,.82)'); gl.addColorStop(.4,'rgba(255,255,255,.22)'); gl.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle = gl; ctx.fill();
+  ctx.restore();
+}
+
+function drawBackground() {
+  const bg = ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#1565c0'); bg.addColorStop(1,'#42a5f5');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+}
+
+function drawGrid(extraYOffset = 0) {
+  // 隣接バブル押し返しオフセット（描画専用・sin山なり）
+  let pushCells = null, pushDX = 0, pushDY = 0;
+  if (neighborPushAnim) {
+    const p = Math.min(1, (Date.now() - neighborPushAnim.t) / neighborPushAnim.dur);
+    const mag = R * 0.25 * Math.sin(p * Math.PI);
+    pushDX = neighborPushAnim.nx * mag;
+    pushDY = neighborPushAnim.ny * mag;
+    pushCells = neighborPushAnim.cells;
+    if (p >= 1) neighborPushAnim = null;
+  }
+
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < (grid[r]?.length ?? 0); c++) {
+      if (!grid[r][c]) continue;
+      const {x, y} = bubblePos(r, c);
+      let dx = 0, dy = extraYOffset;
+      if (pushCells && pushCells.some(cell => cell.r === r && cell.c === c)) {
+        dx += pushDX; dy += pushDY;
+      }
+      drawBubble(x + dx, y + dy, R, grid[r][c]);
+    }
+}
+
+// ③ ゲームオーバーラインを描画（バブルが LOSE_Y の3行上以内に迫ったら表示）
+function drawDangerLine() {
+  if (gameState !== 'play') return;
+  // 最も下にあるバブルのY座標を取得
+  let lowestY = 0;
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < (grid[r]?.length ?? 0); c++)
+      if (grid[r][c]) lowestY = Math.max(lowestY, bubblePos(r,c).y);
+
+  // LOSE_Y の3行上 より下に迫ったら表示開始（Y軸は下方向が正）
+  const threshold = LOSE_Y - ROW_H * 3;
+  if (lowestY < threshold) return;
+
+  // 接近度 0→1 でフェードイン・点滅
+  const proximity = Math.min(1, (lowestY - threshold) / (ROW_H * 3));
+  const blink = 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 220));
+  const alpha = proximity * blink;
+
+  ctx.save();
+  // 赤いグロー
+  ctx.shadowColor = `rgba(255,60,60,${alpha * 0.8})`;
+  ctx.shadowBlur  = 12;
+  ctx.strokeStyle = `rgba(255,70,70,${alpha})`;
+  ctx.lineWidth   = 2.5;
+  ctx.setLineDash([12, 6]);
+  ctx.beginPath();
+  ctx.moveTo(0,   LOSE_Y);
+  ctx.lineTo(W,   LOSE_Y);
+  ctx.stroke();
+  // "DANGER" ラベル
+  ctx.setLineDash([]);
+  ctx.shadowBlur  = 6;
+  ctx.fillStyle   = `rgba(255,100,100,${alpha})`;
+  ctx.font        = `bold ${Math.round(R * 0.7)}px 'M PLUS Rounded 1c', sans-serif`;
+  ctx.textAlign   = 'right';
+  ctx.fillText('⚠ DANGER', W - 8, LOSE_Y - 5);
+  ctx.restore();
+}
+
+// ── Trajectory ──────────────────────────────────────
+// 実バブルと同じ HIT_R・ステップ幅を使うことで衝突点を一致させる
+const TRAJ_STEP = SPEED / SUBSTEPS;   // 実バブル1サブステップ分 ≈ 2.75px
+
+// landBubble() と同じセル探索ロジックで着地セル中心座標を返す（grid非破壊）
+function predictLandPos(bx, by) {
+  let best = null, bestDist = Infinity;
+  const maxRow = grid.length + 2;
+  for (let r = 0; r < maxRow; r++) {
+    const cols = r < grid.length ? grid[r] : null;
+    for (let c = 0; c < colsInRow(r); c++) {
+      if (cols && cols[c]) continue;           // 既に埋まっている
+      const p = bubblePos(r, c);
+      const d = (bx - p.x) ** 2 + (by - p.y) ** 2;
+      if (d < bestDist && isAdjacentToGrid(r, c)) { bestDist = d; best = p; }
+    }
+  }
+  return best; // {x, y} of cell center, or null
+}
+
+function calcTrajectory(sx, sy, mx, my) {
+  const dx=mx-sx, dy=my-sy, len=Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return [];
+  let vx=dx/len, vy=dy/len;
+  if (vy > -0.1) return [];
+  const pts=[{x:sx,y:sy}]; let x=sx, y=sy, dist=0;
+  while (dist < 1600) {
+    x+=vx*TRAJ_STEP; y+=vy*TRAJ_STEP; dist+=TRAJ_STEP;
+    if (x-R<0){x=R;vx=Math.abs(vx);} if (x+R>W){x=W-R;vx=-Math.abs(vx);}
+
+    // 天井に達した
+    if (y-R<=GRID_TOP){
+      const snapped = predictLandPos(x, y);
+      pts.push(snapped ?? {x, y});
+      break;
+    }
+
+    // グリッドバブルに接触
+    let hit=false;
+    for (let r=0; r<grid.length&&!hit; r++)
+      for (let c=0; c<(grid[r]?.length??0)&&!hit; c++) {
+        if (!grid[r][c]) continue;
+        const p=bubblePos(r,c);
+        if ((x-p.x)**2+(y-p.y)**2 < HIT_R*HIT_R) { hit=true; }
+      }
+    if (hit) {
+      // 衝突座標から着地セル中心へスナップ
+      const snapped = predictLandPos(x, y);
+      pts.push(snapped ?? {x, y});
+      break;
+    }
+    pts.push({x,y});
+  }
+  return pts;
+}
+
+function drawTrajectory(pts) {
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.setLineDash([7,9]); ctx.strokeStyle='rgba(255,255,255,.5)';
+  ctx.lineWidth=2.5; ctx.lineCap='round';
+  ctx.shadowColor='rgba(255,255,255,.2)'; ctx.shadowBlur=4;
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.stroke();
+  const last=pts[pts.length-1];
+  ctx.setLineDash([]); ctx.shadowBlur=0;
+  ctx.beginPath(); ctx.arc(last.x,last.y,R*.45,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.fill();
+  // 中心の小ドット
+  ctx.beginPath(); ctx.arc(last.x,last.y,4,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fill();
+  ctx.restore();
+}
+
+// ── Shooter & Queue ───────────────────────────────
+function drawShooter() {
+  if (swapAnim) {
+    // スワップ中: fromNextColor が NEXT_X → SHOOTER_X に移動してくる
+    const p  = Math.min(1, (Date.now() - swapAnim.t) / swapAnim.dur);
+    const ep = p < 0.5 ? 2*p*p : 1-2*(1-p)*(1-p); // easeInOut
+    const x  = NEXT_X + (SHOOTER_X - NEXT_X) * ep;
+    drawBubble(x, SHOOTER_Y, R, swapAnim.fromNextColor);
+    return;
+  }
+  drawBubble(SHOOTER_X, SHOOTER_Y, R, shooter.color);
+}
+
+// NEXT バブルの画面上の位置（クリック判定にも使う）
+const NEXT_X = SHOOTER_X + 58;
+const NEXT_Y = SHOOTER_Y;
+
+// HOLD スロットの位置（シューター左側、NEXTと対称）
+const SLOT_X = SHOOTER_X - 58;
+const SLOT_Y = SHOOTER_Y;
+
+function drawQueue() {
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,H-UI_H); ctx.lineTo(W,H-UI_H); ctx.stroke();
+  ctx.restore();
+
+  // NEXT ラベル
+  ctx.save();
+  ctx.font = 'bold 10px "M PLUS Rounded 1c",sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.42)';
+  ctx.textAlign = 'center';
+  ctx.fillText('NEXT', NEXT_X, NEXT_Y - R - 6);
+  ctx.restore();
+
+  // NEXTバブル（クリック可能を示す枠）
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.arc(NEXT_X, NEXT_Y, R + 5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  if (swapAnim) {
+    // スワップ中: fromShooterColor が SHOOTER_X → NEXT_X に移動していく
+    const p  = Math.min(1, (Date.now() - swapAnim.t) / swapAnim.dur);
+    const ep = p < 0.5 ? 2*p*p : 1-2*(1-p)*(1-p);
+    const x  = SHOOTER_X + (NEXT_X - SHOOTER_X) * ep;
+    drawBubble(x, NEXT_Y, R, swapAnim.fromShooterColor);
+    if (p >= 1) swapAnim = null;
+  } else {
+    drawBubble(NEXT_X, NEXT_Y, R, queue[0]);
+  }
+
+  // 入れ替えアイコン
+  const swapX = (SHOOTER_X + NEXT_X) / 2;
+  ctx.save();
+  ctx.font = 'bold 13px "M PLUS Rounded 1c",sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.textAlign = 'center';
+  ctx.fillText('⇄', swapX, NEXT_Y + 5);
+  ctx.restore();
+}
+
+// ── HOLD スロット描画 ──────────────────────────────
+function drawSlot() {
+  // HOLDラベル
+  ctx.save();
+  ctx.font = 'bold 10px "M PLUS Rounded 1c",sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.42)';
+  ctx.textAlign = 'center';
+  ctx.fillText('HOLD', SLOT_X, SLOT_Y - R - 6);
+  ctx.restore();
+
+  // 枠（実線・やや明るめでスロット感を演出）
+  ctx.save();
+  ctx.strokeStyle = slot ? 'rgba(255,220,80,0.7)' : 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = slot ? 2 : 1.5;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(SLOT_X, SLOT_Y, R + 5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // スロットが空の場合：点線の空枠
+  if (!slot) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.arc(SLOT_X, SLOT_Y, R + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.font = `18px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('＋', SLOT_X, SLOT_Y + 1);
+  } else {
+    // バブルを小さめに描画（R*0.85）して「保管中」感を出す
+    drawBubble(SLOT_X, SLOT_Y, R * 0.85, slot);
+    // タップ可能を示すグロー
+    const glow = 0.4 + 0.3 * Math.abs(Math.sin(Date.now() / 600));
+    ctx.shadowColor = isBomb(slot) ? `rgba(255,120,0,${glow})` : `rgba(100,220,255,${glow})`;
+    ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(SLOT_X, SLOT_Y, R + 5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawPenaltyCounter() {
+  if (gameState !== 'play') return;
+  const limit     = getMissLimit();
+  const remaining = limit - missCount;
+  // パネルをNEXTの右側に配置（スロットとの重複を避ける）
+  const cx        = W - 38;
+  const cy        = H - UI_H - 46;
+
+  // 背景パネル（高さを広げて全要素を収める）
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,10,40,0.55)';
+  ctx.beginPath();
+  ctx.roundRect(cx - 38, cy - 32, 76, 76, 10);
+  ctx.fill();
+
+  // ラベル
+  ctx.font = `bold 9px "M PLUS Rounded 1c",sans-serif`;
+  ctx.fillStyle = 'rgba(180,210,255,0.75)';
+  ctx.textAlign = 'center';
+  ctx.fillText('ミスあと', cx, cy - 18);
+
+  // 数字（フェード対応 + 残り1のとき赤く点滅）
+  if (cntShown === null) cntShown = remaining;
+  const urgent   = remaining <= 1;
+  const urgBlink = urgent ? (0.6 + 0.4 * Math.abs(Math.sin(Date.now() / 180))) : 1;
+  ctx.font = `800 26px "M PLUS Rounded 1c",sans-serif`;
+
+  const numColor = (val) =>
+    val <= 1 ? `rgba(255,80,80,1)` : val <= 2 ? 'rgba(255,200,60,1)' : 'rgba(255,255,255,0.95)';
+
+  if (cntFade) {
+    const p = Math.min(1, (Date.now() - cntFade.t) / cntFade.dur);
+    // 古い値がフェードアウト（上へ移動）
+    ctx.globalAlpha = (1 - p) * (cntFade.fromVal <= 1 ? urgBlink : 1);
+    ctx.fillStyle = numColor(cntFade.fromVal);
+    ctx.fillText(cntFade.fromVal, cx, cy + 10 - 8 * p);
+    // 新しい値がフェードイン（下から上へ）
+    ctx.globalAlpha = p * (cntFade.toVal <= 1 ? urgBlink : 1);
+    ctx.fillStyle = numColor(cntFade.toVal);
+    ctx.fillText(cntFade.toVal, cx, cy + 18 - 8 * p);
+    ctx.globalAlpha = 1;
+    if (p >= 1) { cntFade = null; cntShown = remaining; }
+  } else {
+    ctx.fillStyle = urgent
+      ? `rgba(255,80,80,${urgBlink})`
+      : remaining <= 2 ? 'rgba(255,200,60,1)' : 'rgba(255,255,255,0.95)';
+    ctx.fillText(remaining, cx, cy + 10);
+  }
+
+  // 残り回数をドットで表示
+  const dotR   = 4;
+  const dotGap = 10;
+  const startX = cx - ((limit - 1) * dotGap) / 2;
+  for (let i = 0; i < limit; i++) {
+    ctx.beginPath();
+    ctx.arc(startX + i * dotGap, cy + 22, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = i < remaining ? 'rgba(100,200,255,0.9)' : 'rgba(255,60,60,0.6)';
+    ctx.fill();
+  }
+
+  // 押し下げ行数ラベル（消えた色数+1行）
+  const pushRows = getEliminatedColorCount() + 1;
+  ctx.font = `bold 9px "M PLUS Rounded 1c",sans-serif`;
+  ctx.fillStyle = pushRows >= 3 ? 'rgba(255,140,60,0.9)' : 'rgba(180,210,255,0.6)';
+  ctx.fillText(`▼${pushRows}行`, cx, cy + 38);
+  ctx.restore();
+}
+
+// ── Particles ────────────────────────────────────────
+function spawnPop(x,y,color){
+  for(let i=0;i<10;i++){
+    const a=Math.random()*Math.PI*2, s=2+Math.random()*4;
+    popParticles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,color,life:1,r:R*.4});
+  }
+}
+function updateParticles(){
+  popParticles=popParticles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.15;p.life-=.04;return p.life>0;});
+  dropParticles=dropParticles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.3;p.life-=.025;return p.life>0;});
+}
+function drawParticles(){
+  popParticles.forEach(p=>{ctx.save();ctx.globalAlpha=p.life;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();});
+  dropParticles.forEach(p=>drawBubble(p.x,p.y,R*p.life*.8,p.color,p.life));
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  Game Logic
+// ═══════════════════════════════════════════════════════
+function shoot(mx, my) {
+  if (animBubble||gameState!=='play'||paused||slideAnim||swapAnim||landingAnim) return;
+  const dx=mx-SHOOTER_X, dy=my-SHOOTER_Y;
+  const len=Math.sqrt(dx*dx+dy*dy);
+  if (len<1||dy>=0) return;
+  initAudio().then(()=>{ sfxShoot(); });
+  // タイマー開始（最初の発射時のみ）
+  if (!stats.startTime) stats.startTime = Date.now();
+  stats.shots++;
+  const color=nextFromQueue();
+  if (isBomb(color)) { bombActive = false; stats.bombUsed++; }
+  if (isWild(color))   stats.wildUsed++;
+  animBubble={x:SHOOTER_X,y:SHOOTER_Y,vx:(dx/len)*SPEED,vy:(dy/len)*SPEED,color};
+}
+
+// 着地セルを探す（grid非破壊）→ {r,c,x,y} or null
+function findBestCell(bx, by) {
+  let best = null, bestDist = Infinity;
+  const maxRow = grid.length + 2;
+  for (let r = 0; r < maxRow; r++) {
+    for (let c = 0; c < colsInRow(r); c++) {
+      if (r < grid.length && grid[r]?.[c]) continue;
+      const p = bubblePos(r, c);
+      const d = (bx - p.x) ** 2 + (by - p.y) ** 2;
+      if (d < bestDist && isAdjacentToGrid(r, c)) { bestDist = d; best = { r, c, x: p.x, y: p.y }; }
+    }
+  }
+  return best;
+}
+
+// ① 斜め隙間: SUBSTEPS分割で細かく衝突判定
+function updateAnimBubble() {
+  if (!animBubble) return;
+  const b = animBubble;
+
+  for (let s = 0; s < SUBSTEPS; s++) {
+    b.x += b.vx / SUBSTEPS;
+    b.y += b.vy / SUBSTEPS;
+
+    if (b.x-R < 0)  { b.x=R;   b.vx=Math.abs(b.vx); }
+    if (b.x+R > W)  { b.x=W-R; b.vx=-Math.abs(b.vx); }
+
+    if (b.y-R <= GRID_TOP) { startLandingAnim(b, b.x, b.y, null); return; }
+
+    // 衝突セルを特定して渡す（シールド直撃判定に使う）
+    let hitCell = null;
+    outer:
+    for (let r=0; r<grid.length; r++)
+      for (let c=0; c<(grid[r]?.length??0); c++){
+        if (!grid[r][c]) continue;
+        const p=bubblePos(r,c);
+        if ((b.x-p.x)**2+(b.y-p.y)**2 < HIT_R*HIT_R){ hitCell={r,c}; break outer; }
+      }
+    if (hitCell) { startLandingAnim(b, b.x, b.y, hitCell); return; }
+  }
+}
+
+// ── 着地アニメ開始 ──────────────────────────────────
+// hitX/hitY: 衝突検出時のバブル座標
+// hitCell: 衝突を引き起こしたグリッドセル {r,c}（null=天井着地）
+function startLandingAnim(b, hitX, hitY, hitCell) {
+  // シールド直撃の場合も通常着地と同じく最近傍の空きセルに着地させる。
+  // completeLanding でマッチ判定を行い、マッチなし時のみシールド直撃処理に入る。
+  const cell = findBestCell(hitX, hitY);
+  if (!cell) { animBubble = null; return; }
+
+  const blen = Math.sqrt(b.vx**2 + b.vy**2) || 1;
+  const nx = b.vx / blen, ny = b.vy / blen;
+  const embedX = hitX + nx * R * 0.45;
+  const embedY = hitY + ny * R * 0.45;
+
+  // hitCell がシールドなら direct hit 情報を付与（completeLanding で参照）
+  const shieldDirectHit = (hitCell && isShield(grid[hitCell.r]?.[hitCell.c]))
+    ? { r: hitCell.r, c: hitCell.c }
+    : null;
+
+  landingAnim = {
+    t: Date.now(),
+    color: b.color,
+    phase: 1, p1dur: 80, p2dur: 110,
+    fromX: hitX, fromY: hitY,
+    embedX, embedY,
+    snapX: cell.x, snapY: cell.y,
+    nx, ny,
+    destR: cell.r, destC: cell.c,
+    shieldDirectHit,
+  };
+  animBubble = null;
+  sfxLand();
+
+  const neighbors = [];
+  for (const {r, c} of getNeighbors(cell.r, cell.c)) {
+    if (grid[r]?.[c]) neighbors.push({r, c});
+  }
+  if (neighbors.length) {
+    neighborPushAnim = { t: Date.now(), dur: 220, cells: neighbors, nx, ny };
+  }
+}
+
+// ── ワイルド解決：最も多くマッチする色を選ぶ ────
+function resolveWildColor(destR, destC) {
+  const boardColors = getBoardColors();
+  if (!boardColors.length) return COLORS[0];
+  let bestColor = boardColors[0], bestCount = 0;
+  for (const c of boardColors) {
+    grid[destR][destC] = c;
+    const m = findMatches(destR, destC, c);
+    if (m.length > bestCount) { bestCount = m.length; bestColor = c; }
+  }
+  grid[destR][destC] = null;
+  return bestColor;
+}
+
+// ── 爆弾爆発処理 ────────────────────────────────
+function handleBombBlast(cx, cy) {
+  const blastR = R * 3.2;
+  const victims = [];
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < (grid[r]?.length ?? 0); c++) {
+      if (!grid[r][c]) continue;
+      const p = bubblePos(r,c);
+      if ((p.x-cx)**2 + (p.y-cy)**2 < blastR*blastR) victims.push({r,c});
+    }
+  let poppedCount = 0;
+  victims.forEach(({r,c}) => {
+    const p = bubblePos(r,c);
+    spawnPop(p.x, p.y, cellColor(grid[r][c]) || '#ff8c00');
+    grid[r][c] = null; score += 100; poppedCount++;
+  });
+  if (poppedCount > 0) {
+    stats.popped    += poppedCount;
+    stats.hitShots++;
+    stats.combo++;
+    if (stats.combo    > stats.maxCombo)   stats.maxCombo   = stats.combo;
+    if (poppedCount    > stats.maxPopOnce) stats.maxPopOnce = poppedCount;
+  }
+  sfxBomb();
+  bombBlastAnim = { t: Date.now(), dur: 420, x: cx, y: cy };
+  updateScoreDisplay();
+  const dropped = findOrphans();
+  if (dropped.length) sfxDrop();
+  dropped.forEach(({r,c}) => {
+    const p = bubblePos(r,c);
+    dropParticles.push({x:p.x,y:p.y,vx:(Math.random()-.5)*2,vy:-1,color:cellColor(grid[r][c])||'#ff8c00',life:1});
+    grid[r][c]=null; score+=50; stats.popped++;
+  });
+  updateScoreDisplay(); trimEmptyRows(); syncQueueWithBoard();
+}
+
+// ── 着地完了処理（アニメ終了後に呼ばれる）──────────
+function completeLanding() {
+  const la = landingAnim;
+  landingAnim = null;
+  const isWildShot = isWild(la.color);
+
+  // ─ 爆弾 ─
+  if (isBomb(la.color)) {
+    bombActive = false;
+    handleBombBlast(la.snapX, la.snapY);
+    if (checkWin()) { sfxClear(); setTimeout(()=>{ gameState='win'; showMainOverlay('クリア！🎉','全消しクリア！','もう一度',true); },400); }
+    else if (checkLose()) { sfxGameover(); setTimeout(()=>{ gameState='over'; showMainOverlay('ゲームオーバー','','リトライ',true); },400); }
+    return;
+  }
+
+  // セルに配置（ワイルドは後で消すが一旦置いて孤立判定に使う）
+  if (!grid[la.destR]) grid[la.destR] = new Array(colsInRow(la.destR)).fill(null);
+  grid[la.destR][la.destC] = isWildShot ? WILD : la.color;
+
+  // ═══════════════════════════════════════════════════════
+  // ─ レインボー（ワイルド） ──────────────────────────
+  // 接する全色クラスターを消去（1個でも可）・ミスなし
+  // ═══════════════════════════════════════════════════════
+  if (isWildShot) {
+    sfxWild();
+    grid[la.destR][la.destC] = null;
+
+    const visited = new Set();
+    const cellsToRemove = [];
+    for (const {r, c} of getNeighbors(la.destR, la.destC)) {
+      const color = grid[r]?.[c];
+      if (!isNormalColor(color)) continue;
+      const cluster = findMatches(r, c, color);
+      for (const cell of cluster) {
+        const key = `${cell.r},${cell.c}`;
+        if (!visited.has(key)) { visited.add(key); cellsToRemove.push(cell); }
+      }
+    }
+    const totalPopped = cellsToRemove.length;
+    cellsToRemove.forEach(({r, c}) => {
+      const p = bubblePos(r, c);
+      spawnPop(p.x, p.y, cellColor(grid[r][c]) || '#fff');
+      grid[r][c] = null;
+    });
+    if (totalPopped > 0) sfxPop();
+    score += totalPopped * 100;
+    updateScoreDisplay();
+    stats.popped    += totalPopped;
+    stats.hitShots++;
+    stats.combo++;
+    if (stats.combo    > stats.maxCombo)   stats.maxCombo   = stats.combo;
+    if (totalPopped    > stats.maxPopOnce) stats.maxPopOnce = totalPopped;
+    const droppedW = findOrphans();
+    if (droppedW.length) sfxDrop();
+    droppedW.forEach(({r, c}) => {
+      const p = bubblePos(r, c);
+      dropParticles.push({x:p.x,y:p.y,vx:(Math.random()-.5)*2,vy:-1,color:cellColor(grid[r][c])||'#fff',life:1});
+      grid[r][c]=null; score+=50; stats.popped++;
+    });
+    updateScoreDisplay(); trimEmptyRows(); syncQueueWithBoard();
+    const milestoneW = Math.floor(stats.popped / 50);
+    if (milestoneW > wildGranted && wildGranted < 4
+        && !isWild(queue[0]) && !isWild(shooter.color) && !isWild(slot)) {
+      wildGranted++;
+      if (!slot) slot = WILD; else queue[0] = WILD; // スロット空きがあればスロット優先
+    }
+    if (checkWin()) { sfxClear(); setTimeout(()=>{ gameState='win'; showMainOverlay('クリア！🎉','全消しクリア！','もう一度',true); },400); }
+    else if (checkLose()) { sfxGameover(); setTimeout(()=>{ gameState='over'; showMainOverlay('ゲームオーバー','','リトライ',true); },400); }
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ─ 隣接シールドへのダメージ（hp-- 段階的ダメージ）─
+  // ═══════════════════════════════════════════════════════
+  let shieldsDestroyed = 0;
+  let shieldsHit = 0;  // hp-- でヒビが入ったが破壊されなかった数
+  let sfxOffset = 0;
+  for (const {r,c} of getNeighbors(la.destR, la.destC)) {
+    if (!isShield(grid[r]?.[c])) continue;
+    grid[r][c].hp--;
+    if (grid[r][c].hp <= 0) {
+      const p = bubblePos(r,c);
+      spawnPop(p.x, p.y, '#90a4ae');
+      grid[r][c] = null;
+      sfxShieldBreak(sfxOffset);
+      score += 150; stats.popped++;
+      shieldsDestroyed++;
+    } else {
+      sfxShieldHit(sfxOffset); // hp=1（ヒビ）で残る
+      shieldsHit++;
+    }
+    sfxOffset += 0.06;
+  }
+  if (shieldsDestroyed > 0) {
+    const droppedS = findOrphans();
+    if (droppedS.length) sfxDrop();
+    droppedS.forEach(({r,c}) => {
+      const p = bubblePos(r,c);
+      dropParticles.push({x:p.x,y:p.y,vx:(Math.random()-.5)*2,vy:-1,color:cellColor(grid[r][c])||'#ccc',life:1});
+      grid[r][c]=null; score+=50; stats.popped++;
+    });
+    updateScoreDisplay(); trimEmptyRows();
+  }
+
+  // ─ カラーマッチ ─
+  const matched = findMatches(la.destR, la.destC, la.color);
+
+  if (matched.length >= 3) {
+    matched.forEach(({r,c}) => { const p=bubblePos(r,c); spawnPop(p.x,p.y,cellColor(grid[r][c])||'#fff'); grid[r][c]=null; });
+    sfxPop(); score += matched.length * 100; updateScoreDisplay();
+    stats.popped    += matched.length;
+    stats.hitShots++;
+    stats.combo++;
+    if (stats.combo     > stats.maxCombo)   stats.maxCombo   = stats.combo;
+    if (matched.length  > stats.maxPopOnce) stats.maxPopOnce = matched.length;
+    const droppedN = findOrphans();
+    if (droppedN.length) sfxDrop();
+    droppedN.forEach(({r,c}) => {
+      const p = bubblePos(r,c);
+      dropParticles.push({x:p.x,y:p.y,vx:(Math.random()-.5)*2,vy:-1,color:cellColor(grid[r][c])||'#fff',life:1});
+      grid[r][c]=null; score+=50; stats.popped++;
+    });
+    updateScoreDisplay(); trimEmptyRows(); syncQueueWithBoard();
+    const milestoneN = Math.floor(stats.popped / 50);
+    if (milestoneN > wildGranted && wildGranted < 4
+        && !isWild(queue[0]) && !isWild(shooter.color) && !isWild(slot)) {
+      wildGranted++;
+      if (!slot) slot = WILD; else queue[0] = WILD;
+    }
+
+  } else if (shieldsDestroyed > 0 || shieldsHit > 0) {
+    // 隣接シールドにダメージ → ヒット扱い（ミスなし）・発射バブルは消去
+    // ※シールド破壊→孤立→trimEmptyRowsで行が消えている場合があるため ?. で安全にアクセス
+    if (grid[la.destR]) grid[la.destR][la.destC] = null;
+    updateScoreDisplay();
+    syncQueueWithBoard();
+    stats.hitShots++;
+    stats.combo++;
+    if (stats.combo > stats.maxCombo) stats.maxCombo = stats.combo;
+
+  } else {
+    // ─ マッチなし ─
+    // まずシールド直撃だった場合は即破壊してミスなしで処理
+    if (la.shieldDirectHit) {
+      const {r, c} = la.shieldDirectHit;
+      if (isShield(grid[r]?.[c])) {
+        // 着地バブル自身をグリッドから除去（発射バブルは消滅扱い）
+        grid[la.destR][la.destC] = null;
+        const p = bubblePos(r, c);
+        spawnPop(p.x, p.y, '#90a4ae');
+        grid[r][c] = null;
+        sfxShieldBreak();
+        score += 150; stats.popped++;
+        updateScoreDisplay();
+        const droppedSD = findOrphans();
+        if (droppedSD.length) sfxDrop();
+        droppedSD.forEach(({r:dr,c:dc}) => {
+          const dp = bubblePos(dr, dc);
+          dropParticles.push({x:dp.x,y:dp.y,vx:(Math.random()-.5)*2,vy:-1,color:cellColor(grid[dr][dc])||'#ccc',life:1});
+          grid[dr][dc]=null; score+=50; stats.popped++;
+        });
+        updateScoreDisplay(); trimEmptyRows(); syncQueueWithBoard();
+        stats.hitShots++;
+        stats.combo++;
+        if (stats.combo > stats.maxCombo) stats.maxCombo = stats.combo;
+        if (checkWin()) { sfxClear(); setTimeout(()=>{ gameState='win'; showMainOverlay('クリア！🎉','全消しクリア！','もう一度',true); },400); }
+        else if (checkLose()) { sfxGameover(); setTimeout(()=>{ gameState='over'; showMainOverlay('ゲームオーバー','','リトライ',true); },400); }
+        return;
+      }
+    }
+
+    // ─ 通常ミス ─
+    stats.combo = 0;
+    const oldRemaining = getMissLimit() - missCount;
+    missCount++;
+    const newRemaining = getMissLimit() - missCount;
+    const pushNeeded   = missCount >= getMissLimit();
+    if (!pushNeeded && oldRemaining !== newRemaining) {
+      cntFade  = { t: Date.now(), dur: 220, fromVal: oldRemaining, toVal: newRemaining };
+      cntShown = oldRemaining;
+    }
+    if (!bombActive && !bombGivenThisCycle && !isBomb(queue[0]) && !isBomb(shooter.color) && !isBomb(slot)
+        && missCount > getMissLimit() / 2) {
+      bombActive = true;
+      bombGivenThisCycle = true;
+      if (!slot) slot = BOMB; else queue[0] = BOMB;
+    }
+    if (pushNeeded) {
+      const pushRows = doPushGridData();
+      const afterRemaining = getMissLimit() - missCount;
+      cntFade   = { t: Date.now(), dur: 220, fromVal: 0, toVal: afterRemaining };
+      cntShown  = 0;
+      slideAnim = { t: Date.now(), dur: 320, totalOffset: pushRows * ROW_H };
+      pendingGameOver = true;
+      return;
+    }
+  }
+
+  if (checkWin()) {
+    sfxClear();
+    setTimeout(()=>{ gameState='win'; showMainOverlay('クリア！🎉','全消しクリア！','もう一度',true); },400);
+  } else if (checkLose()) {
+    sfxGameover();
+    setTimeout(()=>{ gameState='over'; showMainOverlay('ゲームオーバー','','リトライ',true); },400);
+  }
+}
+
+// ── 旧 landBubble（天井着地など findBestCell が呼べない場合の互換）
+function landBubble(b) { startLandingAnim(b, b.x, b.y); }
+
+function isAdjacentToGrid(r,c){
+  if(r===0) return true;
+  return getNeighbors(r,c).some(({r:nr,c:nc})=>grid[nr]?.[nc]);
+}
+function getNeighbors(row,col){
+  const even = ((row + gridRowParity) % 2 === 0);
+  return [
+    {r:row-1,c:even?col-1:col},{r:row-1,c:even?col:col+1},
+    {r:row,c:col-1},{r:row,c:col+1},
+    {r:row+1,c:even?col-1:col},{r:row+1,c:even?col:col+1},
+  ].filter(({r,c})=>r>=0&&c>=0&&c<colsInRow(r));
+}
+function findMatches(sr,sc,color){
+  const vis=new Set(),stack=[{r:sr,c:sc}],res=[];
+  while(stack.length){
+    const {r,c}=stack.pop(),k=`${r},${c}`;
+    if(vis.has(k))continue; vis.add(k);
+    if(grid[r]?.[c]!==color)continue;
+    res.push({r,c});
+    getNeighbors(r,c).forEach(n=>{if(!vis.has(`${n.r},${n.c}`))stack.push(n);});
+  }
+  return res;
+}
+function findOrphans(){
+  const conn=new Set(),stack=[];
+  for(let c=0;c<colsInRow(0);c++)if(grid[0]?.[c]){stack.push({r:0,c});conn.add(`0,${c}`);}
+  while(stack.length){
+    const {r,c}=stack.pop();
+    getNeighbors(r,c).forEach(({r:nr,c:nc})=>{const k=`${nr},${nc}`;if(!conn.has(k)&&grid[nr]?.[nc]){conn.add(k);stack.push({r:nr,c:nc});}});
+  }
+  const res=[];
+  for(let r=0;r<grid.length;r++)
+    for(let c=0;c<(grid[r]?.length??0);c++)
+      if(grid[r][c]&&!conn.has(`${r},${c}`))res.push({r,c});
+  return res;
+}
+function trimEmptyRows(){ while(grid.length&&grid[grid.length-1]?.every(v=>!v))grid.pop(); }
+
+// ── 盤面データのみ更新（スライド開始は呼び出し元が制御）────
+function doPushGridData() {
+  const pushRows = getEliminatedColorCount() + 1;
+  for (let i = 0; i < pushRows; i++) {
+    const newParity = 1 - gridRowParity;
+    const newCols   = (newParity === 0) ? COLS : COLS - 1;
+    // 行を生成。3回目の行追加以降にシールドを混入（最大2個/行）
+    const newRow = Array.from({ length: newCols }, () => randBoardColor());
+    if (rowsAdded >= 2) {
+      const shieldRate = 0.17;
+      let shieldCount = 0;
+      for (let c = 0; c < newCols; c++) {
+        if (shieldCount >= 2) break;
+        if (Math.random() < shieldRate) {
+          newRow[c] = makeShield(); shieldCount++;
+        }
+      }
+    }
+    grid.unshift(newRow);
+    gridRowParity = newParity;
+    rowsAdded++;
+  }
+  missCount = 0;
+  bombGivenThisCycle = false; // 周期リセット時に爆弾付与フラグもリセット
+  syncQueueWithBoard();
+  if (audioReady) sfxS.land.triggerAttackRelease('A0', '8n', Tone.now() + 0.05);
+  return pushRows;
+}
+
+// ── 盤面を1行下げる（バンプなし経路用・即スライド）────
+function pushDownGrid() {
+  const pushRows = doPushGridData();
+  slideAnim = { t: Date.now(), dur: 320, totalOffset: pushRows * ROW_H };
+}
+function checkWin()  { return grid.every(row=>row.every(v=>!v)); }
+function checkLose() {
+  // ③ LOSE_Y をバブルの下端が超えたらゲームオーバー
+  for(let r=0;r<grid.length;r++)
+    for(let c=0;c<(grid[r]?.length??0);c++)
+      if(grid[r][c]&&bubblePos(r,c).y+R>LOSE_Y)return true;
+  return false;
+}
+function updateScoreDisplay(){ document.getElementById('scoreDisplay').textContent=String(score).padStart(7,'0'); }
+
+
+// ═══════════════════════════════════════════════════════
+//  Overlays
+// ═══════════════════════════════════════════════════════
+function formatPlayTime(ms) {
+  if (!ms || ms < 0) return '0秒';
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  if (m === 0) return `${s}秒`;
+  return `${m}分 ${String(s % 60).padStart(2,'0')}秒`;
+}
+
+function calcPlayedMs() {
+  if (!stats.startTime) return 0;
+  const now = paused && stats.pauseStart ? stats.pauseStart : Date.now();
+  return now - stats.startTime - stats.pausedMs;
+}
+
+function showMainOverlay(title, sub, btnText, showStats = false) {
+  stopBGM();
+  const ov = document.getElementById('overlay');
+  ov.querySelector('h1').textContent = title;
+  ov.querySelector('p').textContent  = sub;
+  ov.querySelector('.ov-btn').textContent = btnText;
+
+  const panel = document.getElementById('statsPanel');
+  if (showStats) {
+    const shots   = stats.shots || 0;
+    const acc     = shots > 0 ? Math.round(stats.hitShots / shots * 100) : 0;
+    const playMs  = calcPlayedMs();
+    document.getElementById('st-score').textContent   = String(score).padStart(7,'0');
+    document.getElementById('st-popped').textContent  = `${stats.popped} 個`;
+    document.getElementById('st-shots').textContent   = `${shots} 回`;
+    document.getElementById('st-acc').textContent     = `${acc}%`;
+    document.getElementById('st-combo').textContent   = `${stats.maxCombo} 連`;
+    document.getElementById('st-maxpop').textContent  = `${stats.maxPopOnce} 個`;
+    document.getElementById('st-wild').textContent    = `${stats.wildUsed} 回`;
+    document.getElementById('st-bomb').textContent    = `${stats.bombUsed} 回`;
+    document.getElementById('st-time').textContent    = formatPlayTime(playMs);
+    panel.style.display = 'block';
+  } else {
+    panel.style.display = 'none';
+  }
+
+  ov.style.display = 'flex';
+
+  // クリア時のみ紙吹雪を起動
+  if (title.includes('クリア')) startConfetti();
+  else stopConfetti();
+}
+function hideMainOverlay(){
+  document.getElementById('overlay').style.display='none';
+  stopConfetti();
+}
+
+// ── 紙吹雪アニメーション ──────────────────────────
+let confettiRAF = null;
+const CONFETTI_COLORS = ['#ff4d6d','#ffd166','#06d6a0','#4cc9f0','#f77fff','#ffffff','#ffb347'];
+
+function startConfetti() {
+  const cv = document.getElementById('confettiCanvas');
+  const ov = document.getElementById('overlay');
+  cv.width  = ov.offsetWidth  || 390;
+  cv.height = ov.offsetHeight || 720;
+  const ctx2 = cv.getContext('2d');
+  const W2 = cv.width, H2 = cv.height;
+
+  // 紙吹雪パーティクル生成
+  const pieces = Array.from({length: 120}, () => ({
+    x:  Math.random() * W2,
+    y:  Math.random() * H2 * -1,       // 画面上からランダムな高さで開始
+    w:  6 + Math.random() * 8,
+    h:  10 + Math.random() * 6,
+    rot: Math.random() * Math.PI * 2,
+    vx: (Math.random() - 0.5) * 1.8,
+    vy: 1.5 + Math.random() * 2.5,
+    vr: (Math.random() - 0.5) * 0.18,
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    shape: Math.random() < 0.35 ? 'circle' : 'rect', // 円 or 四角
+    alpha: 0.85 + Math.random() * 0.15,
+  }));
+
+  // 花火バースト（3発）
+  const bursts = [
+    { x: W2*0.25, y: H2*0.18, done: false, t: 0,  delay: 0   },
+    { x: W2*0.75, y: H2*0.14, done: false, t: 0,  delay: 28  },
+    { x: W2*0.50, y: H2*0.10, done: false, t: 0,  delay: 55  },
+  ];
+  const sparks = []; // 花火の火花
+  let frame = 0;
+
+  function spawnBurst(bx, by) {
+    const n = 28;
+    for (let i = 0; i < n; i++) {
+      const angle = (Math.PI * 2 / n) * i + Math.random() * 0.3;
+      const spd   = 2.5 + Math.random() * 3.5;
+      sparks.push({
+        x: bx, y: by,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life: 1,
+        decay: 0.018 + Math.random() * 0.014,
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        r: 2.5 + Math.random() * 2,
+      });
+    }
+  }
+
+  function loop() {
+    ctx2.clearRect(0, 0, W2, H2);
+    frame++;
+
+    // 花火バースト
+    bursts.forEach(b => {
+      if (!b.done && frame >= b.delay) {
+        b.t++;
+        if (b.t === 1) spawnBurst(b.x, b.y);
+        if (b.t > 80) b.done = true;
+      }
+    });
+
+    // 火花描画
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.x  += s.vx;
+      s.y  += s.vy;
+      s.vy += 0.09; // 重力
+      s.vx *= 0.97;
+      s.life -= s.decay;
+      if (s.life <= 0) { sparks.splice(i, 1); continue; }
+      ctx2.save();
+      ctx2.globalAlpha = s.life;
+      ctx2.fillStyle = s.color;
+      ctx2.shadowColor = s.color;
+      ctx2.shadowBlur = 6;
+      ctx2.beginPath();
+      ctx2.arc(s.x, s.y, s.r * s.life, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.restore();
+    }
+
+    // 紙吹雪描画
+    pieces.forEach(p => {
+      p.x  += p.vx + Math.sin(frame * 0.02 + p.y * 0.01) * 0.4;
+      p.y  += p.vy;
+      p.rot += p.vr;
+      if (p.y > H2 + 20) { p.y = -20; p.x = Math.random() * W2; }
+      ctx2.save();
+      ctx2.globalAlpha = p.alpha;
+      ctx2.translate(p.x, p.y);
+      ctx2.rotate(p.rot);
+      ctx2.fillStyle = p.color;
+      if (p.shape === 'circle') {
+        ctx2.beginPath();
+        ctx2.arc(0, 0, p.w * 0.5, 0, Math.PI * 2);
+        ctx2.fill();
+      } else {
+        ctx2.fillRect(-p.w * 0.5, -p.h * 0.5, p.w, p.h);
+      }
+      ctx2.restore();
+    });
+
+    confettiRAF = requestAnimationFrame(loop);
+  }
+
+  if (confettiRAF) cancelAnimationFrame(confettiRAF);
+  loop();
+}
+
+function stopConfetti() {
+  if (confettiRAF) { cancelAnimationFrame(confettiRAF); confettiRAF = null; }
+  const cv = document.getElementById('confettiCanvas');
+  if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+}
+
+function showPauseMenu(){
+  document.getElementById('pauseMenu').style.display='flex';
+}
+function hidePauseMenu(){
+  document.getElementById('pauseMenu').style.display='none';
+}
+
+function toggleVolumePanel(){
+  volPanelOpen=!volPanelOpen;
+  document.getElementById('volumePanel').style.display=volPanelOpen?'flex':'none';
+}
+
+
+// ── アニメーション状態遷移管理（描画と分離）────────
+function updateAnimations() {
+  // 着地アニメフェーズ管理
+  if (landingAnim) {
+    const now = Date.now();
+    const phase1End = landingAnim.t + landingAnim.p1dur;
+    const phase2End = phase1End + landingAnim.p2dur;
+
+    if (landingAnim.phase === 1 && now >= phase1End) {
+      landingAnim.phase = 2;  // embed完了 → snapへ
+    }
+    if (landingAnim.phase === 2 && now >= phase2End) {
+      completeLanding();  // アニメ完了 → ロジック処理
+      return;
+    }
+  }
+
+  // スライド完了後のゲームオーバー判定
+  if (!slideAnim && pendingGameOver) {
+    pendingGameOver = false;
+    if (checkLose()) {
+      sfxGameover();
+      setTimeout(()=>{ gameState='over'; showMainOverlay('ゲームオーバー','','リトライ', true); },200);
+    }
+  }
+}
+function render(){
+  // スライドオフセット: 負=全バブルが上から下にスライドイン
+  let slideOffset = 0;
+  if (slideAnim) {
+    const p = Math.min(1, (Date.now() - slideAnim.t) / slideAnim.dur);
+    const ep = 1 - (1-p)*(1-p)*(1-p);
+    slideOffset = -slideAnim.totalOffset * (1 - ep); // 負値: 上方→0へ収束
+    if (p >= 1) slideAnim = null;
+  }
+
+  drawBackground(); drawGrid(slideOffset); drawDangerLine();
+
+  const canAim = gameState==='play' && !paused && !animBubble && !slideAnim && !landingAnim;
+  if (canAim) {
+    const pts = calcTrajectory(SHOOTER_X, SHOOTER_Y, mouseX, mouseY);
+    drawTrajectory(pts);
+  }
+
+  if (animBubble) drawBubble(animBubble.x, animBubble.y, R, animBubble.color);
+
+  // 爆発エフェクト
+  if (bombBlastAnim) {
+    const p = Math.min(1, (Date.now() - bombBlastAnim.t) / bombBlastAnim.dur);
+    const br = R * 3.5 * (.15 + p * .85);
+    ctx.save();
+    ctx.globalAlpha = (1-p) * .75;
+    const eg = ctx.createRadialGradient(bombBlastAnim.x, bombBlastAnim.y, 0, bombBlastAnim.x, bombBlastAnim.y, br);
+    eg.addColorStop(0,'rgba(255,240,100,1)'); eg.addColorStop(.35,'rgba(255,120,0,.85)');
+    eg.addColorStop(.7,'rgba(220,50,0,.4)'); eg.addColorStop(1,'rgba(180,30,0,0)');
+    ctx.beginPath(); ctx.arc(bombBlastAnim.x, bombBlastAnim.y, br, 0, Math.PI*2);
+    ctx.fillStyle=eg; ctx.fill();
+    // 外輪
+    ctx.strokeStyle=`rgba(255,180,0,${(1-p)*.5})`; ctx.lineWidth=3;
+    ctx.stroke(); ctx.restore();
+    if (p >= 1) bombBlastAnim = null;
+  }
+
+  // 着地アニメバブル（hit→embed→snap の2フェーズ補間）
+  if (landingAnim) {
+    const now = Date.now();
+    const phase1End = landingAnim.t + landingAnim.p1dur;
+    let bx, by;
+    if (landingAnim.phase === 1) {
+      const p  = Math.min(1, (now - landingAnim.t) / landingAnim.p1dur);
+      const ep = p < 0.5 ? 2*p*p : 1-2*(1-p)*(1-p);
+      bx = landingAnim.fromX + (landingAnim.embedX - landingAnim.fromX) * ep;
+      by = landingAnim.fromY + (landingAnim.embedY - landingAnim.fromY) * ep;
+    } else {
+      const p  = Math.min(1, (now - phase1End) / landingAnim.p2dur);
+      const ep = 1 - (1-p)*(1-p);
+      bx = landingAnim.embedX + (landingAnim.snapX - landingAnim.embedX) * ep;
+      by = landingAnim.embedY + (landingAnim.snapY - landingAnim.embedY) * ep;
+    }
+    drawBubble(bx, by, R, landingAnim.color);
+  }
+
+  drawShooter(); drawQueue(); drawSlot(); drawPenaltyCounter(); drawParticles();
+  if (gameState==='play' && !paused) { updateAnimBubble(); updateParticles(); updateAnimations(); }
+  requestAnimationFrame(render);
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  Input — coordinate helper
+// ═══════════════════════════════════════════════════════
+function canvasXY(cx,cy){
+  const rect=canvas.getBoundingClientRect();
+  return { x:(cx-rect.left)*(W/rect.width), y:(cy-rect.top)*(H/rect.height) };
+}
+
+// ── Mouse ────────────────────────────────────────────
+canvas.addEventListener('mousemove',e=>{const{x,y}=canvasXY(e.clientX,e.clientY);mouseX=x;mouseY=y;});
+canvas.addEventListener('click',e=>{
+  const{x,y}=canvasXY(e.clientX,e.clientY);
+  // HOLDスロット領域クリック → シューターと入れ替え
+  if ((x-SLOT_X)**2+(y-SLOT_Y)**2 < (R+8)**2) { swapShooterSlot(); return; }
+  // NEXTバブル領域クリック → 入れ替え
+  if ((x-NEXT_X)**2+(y-NEXT_Y)**2 < (R+8)**2) { swapShooterQueue(); return; }
+  shoot(x,y);
+});
+
+// ── Touch (drag → release to shoot) ─────────────────
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(gameState!=='play'||paused||animBubble)return;
+  const{x,y}=canvasXY(e.touches[0].clientX,e.touches[0].clientY);
+  mouseX=x;mouseY=y;touchAiming=true;
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(!touchAiming)return;
+  const{x,y}=canvasXY(e.touches[0].clientX,e.touches[0].clientY);
+  mouseX=x;mouseY=y;
+},{passive:false});
+
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(!touchAiming){touchAiming=false;return;}
+  touchAiming=false;
+  if(e.changedTouches.length){
+    const{x,y}=canvasXY(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+    mouseX=x;mouseY=y;
+    // HOLDスロット領域をタップしたら入れ替え
+    if ((x-SLOT_X)**2+(y-SLOT_Y)**2 < (R+8)**2) { swapShooterSlot(); return; }
+    // NEXTバブル領域をタップしたら入れ替え
+    if ((x-NEXT_X)**2+(y-NEXT_Y)**2 < (R+8)**2) { swapShooterQueue(); return; }
+  }
+  shoot(mouseX,mouseY);
+},{passive:false});
+
+canvas.addEventListener('touchcancel',()=>{touchAiming=false;},{passive:false});
+
+
+// ═══════════════════════════════════════════════════════
+//  Buttons
+// ═══════════════════════════════════════════════════════
+// ── start / win / gameover overlay ──
+document.getElementById('startBtn').addEventListener('click',startGame);
+let howtoCaller = 'overlay'; // 'overlay' or 'pauseMenu'
+
+document.getElementById('howtoBtn').addEventListener('click',()=>{
+  howtoCaller = 'overlay';
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('howtoOverlay').style.display='flex';
+});
+document.getElementById('pauseHowtoBtn').addEventListener('click',()=>{
+  howtoCaller = 'pauseMenu';
+  document.getElementById('pauseMenu').style.display='none';
+  document.getElementById('howtoOverlay').style.display='flex';
+});
+document.getElementById('howtoClose').addEventListener('click',()=>{
+  document.getElementById('howtoOverlay').style.display='none';
+  if (howtoCaller === 'pauseMenu') {
+    document.getElementById('pauseMenu').style.display='flex';
+  } else {
+    document.getElementById('overlay').style.display='flex';
+  }
+});
+
+// ⏸ pause button → show pause menu
+document.getElementById('pauseBtn').addEventListener('click',()=>{
+  if(gameState!=='play')return;
+  if(!paused){
+    paused=true;
+    if (stats.startTime) stats.pauseStart = Date.now(); // 一時停止開始時刻を記録
+    document.getElementById('pauseBtn').textContent='▶';
+    stopBGM();
+    showPauseMenu();
+  }
+});
+
+// pause menu: resume
+document.getElementById('resumeBtn').addEventListener('click',()=>{
+  if (stats.pauseStart) {
+    stats.pausedMs  += Date.now() - stats.pauseStart; // 一時停止時間を累計
+    stats.pauseStart = null;
+  }
+  paused=false;
+  document.getElementById('pauseBtn').textContent='⏸';
+  hidePauseMenu();
+  initAudio().then(()=>startBGM());
+});
+
+// pause menu: restart
+document.getElementById('restartBtn').addEventListener('click',()=>{
+  hidePauseMenu();
+  startGame();
+});
+
+// ♪ volume panel toggle
+document.getElementById('musicBtn').addEventListener('click',()=>{
+  initAudio();
+  toggleVolumePanel();
+});
+document.getElementById('vpClose').addEventListener('click',()=>{
+  volPanelOpen=false;
+  document.getElementById('volumePanel').style.display='none';
+});
+
+// Volume sliders
+document.getElementById('bgmSlider').addEventListener('input',e=>{
+  const v=+e.target.value;
+  document.getElementById('bgmVal').textContent=v;
+  setBgmVolume(v);
+  musicOn=(v>0);
+  document.getElementById('musicBtn').textContent=musicOn?'♪':'🔇';
+});
+document.getElementById('sfxSlider').addEventListener('input',e=>{
+  const v=+e.target.value;
+  document.getElementById('sfxVal').textContent=v;
+  setSfxVolume(v);
+});
+
+
+// ═══════════════════════════════════════════════════════
+//  Start Game
+// ═══════════════════════════════════════════════════════
+function startGame(){
+  initAudio().then(()=>{
+    hideMainOverlay();
+    hidePauseMenu();
+    score=0; updateScoreDisplay();
+    animBubble=null; popParticles=[]; dropParticles=[];
+    swapAnim=null; slideAnim=null; landingAnim=null;
+    neighborPushAnim=null; cntFade=null; cntShown=null; pendingGameOver=false;
+    bombBlastAnim=null; wildGranted=0; bombActive=false; bombGivenThisCycle=false; slot=null;
+    paused=false; gameState='play';
+    missCount=0; rowsAdded=0; gridRowParity=0;
+    stats = { shots:0, hitShots:0, popped:0, maxPopOnce:0,
+              combo:0, maxCombo:0, startTime:null, pausedMs:0, pauseStart:null,
+              wildUsed:0, bombUsed:0 };
+    document.getElementById('pauseBtn').textContent='⏸';
+    initGrid(9); initShooter();
+    initialColorCount = getBoardColors().length;
+    startBGM();
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  Responsive Resize
+// ═══════════════════════════════════════════════════════
+function resize(){
+  const scale=Math.min(window.innerWidth/W, window.innerHeight/H);
+  const cw=Math.floor(W*scale), ch=Math.floor(H*scale);
+  canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+  wrapper.style.width=cw+'px'; wrapper.style.height=ch+'px';
+  wrapper.style.setProperty('--ui-h', (UI_H*scale)+'px');
+  wrapper.style.setProperty('--cw',   cw+'px');
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange',()=>setTimeout(resize,150));
+resize();
+
+render();
+</script>
+</body>
+</html>
